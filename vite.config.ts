@@ -8,6 +8,7 @@ export default defineConfig({
   ],
   server: {
     port: 8100,
-    host: '0.0.0.0'
+    host: '0.0.0.0',
+    allowedHosts: ['.ngrok.app', '.ngrok.io']
   }
 })
