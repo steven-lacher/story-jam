@@ -63,12 +63,12 @@ const Game: React.FC = () => {
     });
 
     const initializeStory = async () => {
-      // Only run once: if host, game is playing, story has one entry, rounds is empty, and not already initializing
+      // Only run once: if host, game is playing, story is empty, rounds is empty, and not already initializing
       if (
         isHost &&
         gameId &&
         gameState.status === 'playing' &&
-        gameState.story.length === 1 &&
+        gameState.story.length === 0 &&
         gameState.rounds.length === 0 &&
         !isInitializing
       ) {
@@ -78,6 +78,11 @@ const Game: React.FC = () => {
           console.log('First sentence from localStorage:', firstSentence);
 
           if (firstSentence) {
+            // Add the first sentence to the story
+            const { addToStory } = await import('../services/firebase.service');
+            await addToStory(gameId, firstSentence);
+            console.log('First sentence added to story');
+
             // Now start Round 1 with a prompt to continue the story
             const prompt = `Continue the story after: "${firstSentence}"`;
             await startRound(prompt);
@@ -244,10 +249,12 @@ const Game: React.FC = () => {
 
   // Determine if current user is the winner
   const allPlayers = [...gameState.players, ...gameState.aiPlayers];
-  const winner = allPlayers.reduce((prev, current) =>
-    (current.score > prev.score) ? current : prev
-  );
-  const isWinner = userState.userId === winner.id;
+  const winner = allPlayers.length > 0
+    ? allPlayers.reduce((prev, current) =>
+        (current.score > prev.score) ? current : prev
+      )
+    : null;
+  const isWinner = winner ? userState.userId === winner.id : false;
 
   // Update title based on status
   const getTitle = () => {
