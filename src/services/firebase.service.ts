@@ -25,6 +25,9 @@ export interface FirestoreGameLobby {
   status: GameStatus;
   rounds: Round[];
   story: string[];
+  finalTitle?: string;
+  titleAuthor?: string;
+  titlePhaseStartTime?: number;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -192,6 +195,14 @@ export const startNewRound = async (
 
   const gameData = gameSnap.data() as FirestoreGameLobby;
 
+  // Check if a round with this roundNumber already exists
+  const roundExists = gameData.rounds.some(r => r.roundNumber === round.roundNumber);
+  if (roundExists) {
+    console.log(`Round ${round.roundNumber} already exists, skipping creation`);
+    return;
+  }
+
+  console.log(`Creating round ${round.roundNumber}`);
   await updateDoc(gameRef, {
     rounds: [...gameData.rounds, round],
     status: 'playing',
@@ -239,6 +250,14 @@ export const addToStory = async (
 
   const gameData = gameSnap.data() as FirestoreGameLobby;
 
+  // Check if this exact sentence is already the last entry in the story
+  const lastSentence = gameData.story[gameData.story.length - 1];
+  if (lastSentence === sentence) {
+    console.log('Sentence already added to story, skipping duplicate');
+    return;
+  }
+
+  console.log('Adding sentence to story:', sentence);
   await updateDoc(gameRef, {
     story: [...gameData.story, sentence],
     updatedAt: Timestamp.now(),
@@ -321,4 +340,90 @@ export const getUser = async (userId: string): Promise<FirestoreUser | null> => 
   }
 
   return userSnap.data() as FirestoreUser;
+};
+
+// Update player score
+export const updatePlayerScore = async (
+  gameId: string,
+  playerId: string,
+  pointsToAdd: number
+): Promise<void> => {
+  const gameRef = doc(db, GAME_LOBBIES, gameId);
+  const gameSnap = await getDoc(gameRef);
+
+  if (!gameSnap.exists()) {
+    throw new Error('Game not found');
+  }
+
+  const gameData = gameSnap.data() as FirestoreGameLobby;
+
+  // Update score for human players
+  const updatedPlayers = gameData.players.map((player) =>
+    player.id === playerId
+      ? { ...player, score: player.score + pointsToAdd }
+      : player
+  );
+
+  // Update score for AI players
+  const updatedAIPlayers = gameData.aiPlayers.map((player) =>
+    player.id === playerId
+      ? { ...player, score: player.score + pointsToAdd }
+      : player
+  );
+
+  await updateDoc(gameRef, {
+    players: updatedPlayers,
+    aiPlayers: updatedAIPlayers,
+    updatedAt: Timestamp.now(),
+  });
+};
+
+// Start titling phase
+export const startTitlingPhase = async (gameId: string): Promise<void> => {
+  const gameRef = doc(db, GAME_LOBBIES, gameId);
+  await updateDoc(gameRef, {
+    status: 'titling',
+    titlePhaseStartTime: Date.now(),
+    updatedAt: Timestamp.now(),
+  });
+};
+
+// Submit story title
+export const submitStoryTitle = async (
+  gameId: string,
+  title: string,
+  authorId: string
+): Promise<void> => {
+  const gameRef = doc(db, GAME_LOBBIES, gameId);
+  await updateDoc(gameRef, {
+    finalTitle: title,
+    titleAuthor: authorId,
+    status: 'finished',
+    updatedAt: Timestamp.now(),
+  });
+};
+
+// Finalize story with auto-generated title
+export const finalizeStoryWithAutoTitle = async (gameId: string): Promise<void> => {
+  const gameRef = doc(db, GAME_LOBBIES, gameId);
+  const gameSnap = await getDoc(gameRef);
+
+  if (!gameSnap.exists()) {
+    throw new Error('Game not found');
+  }
+
+  const gameData = gameSnap.data() as FirestoreGameLobby;
+
+  // Only apply auto-title if no title exists yet
+  if (gameData.finalTitle) {
+    console.log('Title already exists, skipping auto-title');
+    return;
+  }
+
+  await updateDoc(gameRef, {
+    finalTitle: 'Untitled Story',
+    titleAuthor: 'ai',
+    status: 'finished',
+    updatedAt: Timestamp.now(),
+  });
 };

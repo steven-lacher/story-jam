@@ -33,7 +33,7 @@ export interface Round {
   endTime?: number;
 }
 
-export type GameStatus = 'lobby' | 'playing' | 'finished';
+export type GameStatus = 'lobby' | 'playing' | 'titling' | 'finished';
 
 export interface GameState {
   // Game data
@@ -45,6 +45,9 @@ export interface GameState {
   rounds: Round[];
   currentRoundIndex: number;
   story: string[];
+  finalTitle?: string;
+  titleAuthor?: string; // playerId or 'ai'
+  titlePhaseStartTime?: number;
 
   // Actions
   setGameId: (gameId: string) => void;

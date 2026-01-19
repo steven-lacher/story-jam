@@ -12,6 +12,7 @@ import {
   startNewRound as firebaseStartNewRound,
   updateRound,
   addToStory as firebaseAddToStory,
+  updatePlayerScore,
   type FirestoreGameLobby,
 } from '../services/firebase.service';
 import type { Player, AIPlayer, Round, Submission } from '../stores/gameState';
@@ -41,6 +42,9 @@ export const useFirebaseGame = () => {
           rounds: gameData.rounds,
           story: gameData.story,
           currentRoundIndex: gameData.rounds.length, // Calculate from rounds array
+          finalTitle: gameData.finalTitle,
+          titleAuthor: gameData.titleAuthor,
+          titlePhaseStartTime: gameData.titlePhaseStartTime,
         });
       },
       (error) => {
@@ -192,7 +196,7 @@ export const useFirebaseGame = () => {
         }
 
         const newRound: Round = {
-          roundNumber: gameState.currentRoundIndex + 1,
+          roundNumber: gameState.rounds.length + 1,
           prompt,
           submissions: [],
           phase: 'writing',
@@ -206,7 +210,7 @@ export const useFirebaseGame = () => {
         throw error;
       }
     },
-    [gameState.gameId, gameState.currentRoundIndex]
+    [gameState.gameId, gameState.rounds.length]
   );
 
   // Submit a sentence for the current round
@@ -298,7 +302,7 @@ export const useFirebaseGame = () => {
 
   // Complete the round (determine winner)
   const completeRound = useCallback(
-    async (winnerId: string, winningSentence: string) => {
+    async (winnerId: string, winningSentence: string, points: number) => {
       try {
         if (!gameState.gameId) {
           throw new Error('No active game');
@@ -312,6 +316,9 @@ export const useFirebaseGame = () => {
         });
 
         await firebaseAddToStory(gameState.gameId, winningSentence);
+
+        // Award points to the winner
+        await updatePlayerScore(gameState.gameId, winnerId, points);
 
         uiState.showToast('Round complete!', 'success');
       } catch (error) {

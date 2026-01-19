@@ -15,8 +15,13 @@ import { useGameState } from '../stores/gameState';
 import { useUIState } from '../stores/uiState';
 import { useUserState } from '../stores/userState';
 import { useFirebaseGame } from '../hooks/useFirebaseGame';
+import { startTitlingPhase, finalizeStoryWithAutoTitle } from '../services/firebase.service';
 import GameBoard from '../components/GameBoard';
 import StoryView from '../components/StoryView';
+import TitlingPhase from '../components/TitlingPhase';
+import FinalStoryDisplay from '../components/FinalStoryDisplay';
+
+const TITLE_TIMEOUT = 45000; // 45 seconds in milliseconds
 
 const Game: React.FC = () => {
   const { gameId } = useParams<{ gameId: string }>();
@@ -58,12 +63,13 @@ const Game: React.FC = () => {
     });
 
     const initializeStory = async () => {
-      // Only run once: if host, game is playing, story is empty, and not already initializing
+      // Only run once: if host, game is playing, story has one entry, rounds is empty, and not already initializing
       if (
         isHost &&
         gameId &&
         gameState.status === 'playing' &&
-        gameState.story.length === 0 &&
+        gameState.story.length === 1 &&
+        gameState.rounds.length === 0 &&
         !isInitializing
       ) {
         try {
@@ -72,11 +78,6 @@ const Game: React.FC = () => {
           console.log('First sentence from localStorage:', firstSentence);
 
           if (firstSentence) {
-            // Add the first sentence to the story (not as a round!)
-            const { addToStory } = await import('../services/firebase.service');
-            await addToStory(gameId, firstSentence);
-            console.log('First sentence added to story');
-
             // Now start Round 1 with a prompt to continue the story
             const prompt = `Continue the story after: "${firstSentence}"`;
             await startRound(prompt);
@@ -150,11 +151,12 @@ const Game: React.FC = () => {
           if (winnerIndex >= 0) {
             const winnerId = currentRound.submissions[winnerIndex].playerId;
             const winningSentence = currentRound.submissions[winnerIndex].sentence;
+            const points = maxVotes; // Award points equal to number of votes received
 
-            console.log('Winner:', winnerId, 'Sentence:', winningSentence);
+            console.log('Winner:', winnerId, 'Sentence:', winningSentence, 'Points:', points);
 
             // Complete the current round
-            await completeRound(winnerId, winningSentence);
+            await completeRound(winnerId, winningSentence, points);
 
             // Wait a moment to show the winner
             await new Promise(resolve => setTimeout(resolve, 3000));
@@ -169,9 +171,9 @@ const Game: React.FC = () => {
 
               await startRound(prompt);
             } else {
-              console.log('Game complete! Final round finished.');
-              // Game is over - the winner will be prompted to enter a title
-              // This will be handled in the RoundComplete component
+              console.log('Game complete! Final round finished. Starting titling phase.');
+              // Game is over - start the titling phase
+              await startTitlingPhase(gameId);
             }
           }
         } catch (error) {
@@ -185,20 +187,95 @@ const Game: React.FC = () => {
     handleVotingComplete();
   }, [isHost, gameId, isTransitioning, gameState.rounds, gameState.currentRoundIndex, gameState.story, totalPlayers, maxRounds, completeRound, startRound]);
 
+  // Auto-finalize with default title when timeout expires
+  useEffect(() => {
+    if (gameState.status !== 'titling' || !gameState.titlePhaseStartTime || !gameId) return;
+
+    const timeElapsed = Date.now() - gameState.titlePhaseStartTime;
+    const timeRemaining = TITLE_TIMEOUT - timeElapsed;
+
+    // If already expired, finalize immediately (but only if no title exists yet)
+    if (timeRemaining <= 0) {
+      console.log('Title timeout expired, auto-finalizing');
+      if (!gameState.finalTitle) {
+        finalizeStoryWithAutoTitle(gameId).catch((error) => {
+          console.error('Failed to auto-finalize story:', error);
+        });
+      }
+      return;
+    }
+
+    // Otherwise, set a timeout
+    const timer = setTimeout(() => {
+      console.log('Title timeout reached, checking if auto-finalize needed');
+      // Double-check that status is still 'titling' before auto-finalizing
+      // This prevents race conditions where winner submitted just before timeout
+      const currentState = useGameState.getState();
+      if (currentState.status === 'titling' && !currentState.finalTitle) {
+        console.log('Auto-finalizing with default title');
+        finalizeStoryWithAutoTitle(gameId).catch((error) => {
+          console.error('Failed to auto-finalize story:', error);
+        });
+      } else {
+        console.log('Title already submitted, skipping auto-finalize');
+      }
+    }, timeRemaining);
+
+    return () => clearTimeout(timer);
+  }, [gameState.status, gameState.titlePhaseStartTime, gameId, gameState.finalTitle]);
+
+  // Get the current round's number for display
+  const currentRound = gameState.rounds[gameState.currentRoundIndex - 1];
+  const displayRoundNumber = currentRound?.roundNumber ?? 1;
+
+  // Render different content based on game status
+  const renderContent = () => {
+    if (gameState.status === 'finished') {
+      return <FinalStoryDisplay />;
+    }
+
+    if (gameState.status === 'titling') {
+      return <TitlingPhase />;
+    }
+
+    // Normal gameplay (playing status)
+    return isStoryViewExpanded ? <StoryView /> : <GameBoard />;
+  };
+
+  // Determine if current user is the winner
+  const allPlayers = [...gameState.players, ...gameState.aiPlayers];
+  const winner = allPlayers.reduce((prev, current) =>
+    (current.score > prev.score) ? current : prev
+  );
+  const isWinner = userState.userId === winner.id;
+
+  // Update title based on status
+  const getTitle = () => {
+    if (gameState.status === 'finished') {
+      return 'Story Jam - Story Complete';
+    }
+    if (gameState.status === 'titling') {
+      return isWinner ? 'Story Jam - Title Your Story' : 'Story Jam - Game Complete';
+    }
+    return `Story Jam - Round ${displayRoundNumber}`;
+  };
+
   return (
     <IonPage>
       <IonHeader>
         <IonToolbar>
-          <IonTitle>Story Jam - Round {gameState.currentRoundIndex}</IonTitle>
-          <IonButtons slot="end">
-            <IonButton onClick={toggleStoryView}>
-              <IonIcon icon={bookOutline} />
-            </IonButton>
-          </IonButtons>
+          <IonTitle>{getTitle()}</IonTitle>
+          {gameState.status === 'playing' && (
+            <IonButtons slot="end">
+              <IonButton onClick={toggleStoryView}>
+                <IonIcon icon={bookOutline} />
+              </IonButton>
+            </IonButtons>
+          )}
         </IonToolbar>
       </IonHeader>
       <IonContent fullscreen>
-        {isStoryViewExpanded ? <StoryView /> : <GameBoard />}
+        {renderContent()}
       </IonContent>
     </IonPage>
   );

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from "react";
 import {
   IonCard,
   IonCardContent,
@@ -9,22 +9,23 @@ import {
   IonText,
   IonChip,
   IonProgressBar,
-} from '@ionic/react';
-import { useUserState } from '../stores/userState';
-import { useFirebaseGame } from '../hooks/useFirebaseGame';
-import { useRoundTimer } from '../hooks/useRoundTimer';
-import type { Round } from '../stores/gameState';
+} from "@ionic/react";
+import { useUserState } from "../stores/userState";
+import { useFirebaseGame } from "../hooks/useFirebaseGame";
+import { useRoundTimer } from "../hooks/useRoundTimer";
+import type { Round } from "../stores/gameState";
 
 interface WritingPhaseProps {
   round: Round;
 }
 
-const WRITING_TIME = 60; // 60 seconds for MVP
+// const WRITING_TIME = 60; // 60 seconds for MVP
+const WRITING_TIME = 600; // 60 seconds for MVP
 
 const WritingPhase: React.FC<WritingPhaseProps> = ({ round }) => {
   const { userId } = useUserState();
   const { submitSentence } = useFirebaseGame();
-  const [sentence, setSentence] = useState('');
+  const [sentence, setSentence] = useState("");
   const [hasSubmitted, setHasSubmitted] = useState(false);
 
   // Check if user has already submitted
@@ -32,7 +33,7 @@ const WritingPhase: React.FC<WritingPhaseProps> = ({ round }) => {
     const userSubmission = round.submissions.find((s) => s.playerId === userId);
     if (userSubmission) {
       setHasSubmitted(true);
-      setSentence('');
+      setSentence("");
     }
   }, [round.submissions, userId]);
 
@@ -54,9 +55,9 @@ const WritingPhase: React.FC<WritingPhaseProps> = ({ round }) => {
     try {
       await submitSentence(sentence.trim());
       setHasSubmitted(true);
-      setSentence('');
+      setSentence("");
     } catch (error) {
-      console.error('Failed to submit:', error);
+      console.error("Failed to submit:", error);
     }
   };
 
@@ -65,7 +66,11 @@ const WritingPhase: React.FC<WritingPhaseProps> = ({ round }) => {
   return (
     <div className="ion-padding">
       {/* Timer and Progress */}
-      <IonCard color={timeRemaining !== null && timeRemaining < 10 ? 'danger' : 'primary'}>
+      <IonCard
+        color={
+          timeRemaining !== null && timeRemaining < 10 ? "danger" : "primary"
+        }
+      >
         <IonCardContent className="ion-text-center">
           <IonText>
             <h2>{formattedTime}</h2>
@@ -83,7 +88,13 @@ const WritingPhase: React.FC<WritingPhaseProps> = ({ round }) => {
         <IonCardContent>
           <IonText>
             <h3>Prompt:</h3>
-            <p style={{ fontSize: '1.2rem', fontStyle: 'italic', margin: '16px 0' }}>
+            <p
+              style={{
+                fontSize: "1.2rem",
+                fontStyle: "italic",
+                margin: "16px 0",
+              }}
+            >
               {round.prompt}
             </p>
           </IonText>
@@ -96,7 +107,8 @@ const WritingPhase: React.FC<WritingPhaseProps> = ({ round }) => {
                   <p>Waiting for other players...</p>
                   <p>
                     <strong>
-                      {round.submissions.length} / {/* Will need total player count */}
+                      {round.submissions.length} /{" "}
+                      {/* Will need total player count */}
                       submitted
                     </strong>
                   </p>
@@ -108,23 +120,21 @@ const WritingPhase: React.FC<WritingPhaseProps> = ({ round }) => {
               <IonTextarea
                 placeholder="Write your sentence to continue the story..."
                 value={sentence}
-                onIonInput={(e) => setSentence(e.detail.value || '')}
+                onIonInput={(e) => setSentence(e.detail.value || "")}
                 rows={4}
                 maxlength={200}
                 disabled={hasSubmitted}
                 style={{
-                  border: '1px solid var(--ion-color-medium)',
-                  borderRadius: '8px',
-                  padding: '12px',
-                  marginTop: '16px',
+                  border: "1px solid var(--ion-color-medium)",
+                  borderRadius: "8px",
+                  padding: "12px",
+                  marginTop: "16px",
                 }}
               />
 
               <div className="ion-text-end ion-margin-top">
                 <IonText color="medium">
-                  <small>
-                    {sentence.length} / 200 characters
-                  </small>
+                  <small>{sentence.length} / 200 characters</small>
                 </IonText>
               </div>
 
@@ -146,7 +156,7 @@ const WritingPhase: React.FC<WritingPhaseProps> = ({ round }) => {
         <IonCardContent>
           <IonText className="ion-text-center">
             <p>
-              <strong>Submissions:</strong>{' '}
+              <strong>Submissions:</strong>{" "}
               {round.submissions.map((_, index) => (
                 <IonChip key={index} color="success">
                   ✓
